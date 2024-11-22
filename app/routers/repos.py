@@ -39,7 +39,6 @@ async def get_top_repositories(
 
         logger.info(f"Получен запрос с параметрами: sort_by={params.sort_by}, order={params.order}")
 
-        # Основная логика работы
         repos = await fetch_top_repositories(
             db_pool, sort_by=params.sort_by, order=params.order
         )
