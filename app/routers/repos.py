@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 @router.get("/top100", response_model=List[RepoSchema])
 async def get_top_repositories(
-        request: Request,  # Для извлечения всех параметров запроса
-        params: Top100QueryParams = Depends(),  # Параметры запроса через Pydantic
-        db_pool: Pool = Depends(get_db_pool),  # Подключение к базе данных
+        request: Request,  
+        params: Top100QueryParams = Depends(),  
+        db_pool: Pool = Depends(get_db_pool),  
 ):
     """
     Получение топ-100 репозиториев из базы данных.
