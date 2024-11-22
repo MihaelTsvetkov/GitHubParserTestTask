@@ -1,19 +1,6 @@
 from typing import List, Dict, Any
-from asyncpg import create_pool, Pool
-import os
-from dotenv import load_dotenv
+from asyncpg import Pool
 from datetime import datetime
-
-load_dotenv()
-
-
-DB_HOST = os.getenv("POSTGRES_HOST")
-DB_USER = os.getenv("POSTGRES_USER")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-DB_NAME = os.getenv("POSTGRES_DB")
-DB_PORT = os.getenv("POSTGRES_PORT")
-
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 
 def parse_date(date_str: str) -> datetime.date:
@@ -28,15 +15,6 @@ def parse_date(date_str: str) -> datetime.date:
         return datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError as e:
         raise ValueError(f"Неверный формат даты: {date_str}. Используйте YYYY-MM-DD.") from e
-
-
-async def get_db_pool() -> Pool:
-    """
-    Создает пул соединений с базой данных.
-
-    :return: Асинхронный пул соединений (Pool).
-    """
-    return await create_pool(DATABASE_URL)
 
 
 async def fetch_activity_from_db(

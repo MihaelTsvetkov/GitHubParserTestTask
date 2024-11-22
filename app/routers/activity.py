@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import List, Union
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-
-from app.database.db import get_db_pool, fetch_activity_from_db, parse_date
+from app.database.db import fetch_activity_from_db, parse_date
 from app.schemas.activity_schema import ActivitySchema, MessageResponseSchema
+from app.database.utils import get_db_pool
+from asyncpg.pool import Pool
 import logging
 
 router = APIRouter()
@@ -18,7 +18,7 @@ async def get_activity(
     repo: str,
     start_date: str,
     end_date: str,
-    db_pool=Depends(get_db_pool)
+    db_pool: Pool = Depends(get_db_pool)
 ):
     """
     Получение активности репозитория за указанный период.
@@ -55,7 +55,8 @@ async def get_activity(
         min_date = activity[0]["date"]
 
         logger.info(
-            f"min_date: {min_date} ({type(min_date)}), start_date_parsed: {start_date_parsed} ({type(start_date_parsed)})"
+            f"min_date: {min_date} ({type(min_date)}),"
+            f" start_date_parsed: {start_date_parsed} ({type(start_date_parsed)})"
         )
 
         if isinstance(min_date, str):

@@ -2,32 +2,21 @@ import asyncio
 import aiohttp
 import logging
 import asyncpg
-import os
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
+from config import Config
+from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_HOST = os.getenv("POSTGRES_HOST")
-DB_USER = os.getenv("POSTGRES_USER")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-DB_NAME = os.getenv("POSTGRES_DB")
-DB_PORT = os.getenv("POSTGRES_PORT")
-ACTIVITY_DAYS = int(os.getenv("ACTIVITY_DAYS", 30))
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
-DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"
-
-
-async def get_top_repositories() -> List[Dict[str, Any]]:
+async def get_top_repositories(config: Config) -> List[Dict[str, Any]]:
     """
     Получает топ-100 репозиториев с GitHub.
-
-    :return: Список репозиториев.
     """
     url = "https://api.github.com/search/repositories"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    headers = {"Authorization": f"token {config.github_token}"}
     params = {
         "q": "stars:>1",
         "sort": "stars",
@@ -48,18 +37,19 @@ async def get_top_repositories() -> List[Dict[str, Any]]:
 
 
 async def fetch_activity_for_repo(
-    session: aiohttp.ClientSession, repo_full_name: str, interval_days: int
+    session: aiohttp.ClientSession, repo_full_name: str, interval_days: int, config: Config
 ) -> List[Dict[str, Any]]:
     """
     Получает информацию об активности репозитория через API GitHub.
 
+    :param config: Конфигурация приложения.
     :param session: Сессия AIOHTTP.
     :param repo_full_name: Полное имя репозитория (owner/repo).
     :param interval_days: Количество дней для получения активности.
     :return: Список записей активности.
     """
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    headers = {"Authorization": f"token {config.github_token}"}
 
     end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=interval_days)
@@ -258,10 +248,13 @@ async def run_parser():
     """
     Основная логика парсера для получения и сохранения данных о репозиториях и их активности.
     """
-    pool = await asyncpg.create_pool(DB_URL)
+
+    config = Config()
+
+    pool = await asyncpg.create_pool(config.db_url)
 
     try:
-        repositories = await get_top_repositories()
+        repositories = await get_top_repositories(config)
 
         if not repositories:
             logger.warning("Не удалось получить ни одного репозитория.")
@@ -273,7 +266,7 @@ async def run_parser():
 
                 async with aiohttp.ClientSession() as session:
                     tasks = [
-                        fetch_activity_for_repo(session, repo["full_name"], ACTIVITY_DAYS)
+                        fetch_activity_for_repo(session, repo["full_name"], config.activity_days)
                         for repo in repositories
                     ]
 

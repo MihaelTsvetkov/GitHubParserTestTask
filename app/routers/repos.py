@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from app.database.db import get_db_pool, fetch_top_repositories
+from asyncpg import PostgresError
+from fastapi import APIRouter, HTTPException, Depends, Request
+from app.database.db import fetch_top_repositories
 from app.schemas.repo_schema import RepoSchema
-from typing import Optional, List
+from app.schemas.query_params import Top100QueryParams
+from app.database.utils import get_db_pool
+from typing import List
 from asyncpg.pool import Pool
 import logging
 
@@ -11,46 +14,56 @@ logger = logging.getLogger(__name__)
 
 @router.get("/top100", response_model=List[RepoSchema])
 async def get_top_repositories(
-    db_pool: Pool = Depends(get_db_pool),
-    sort_by: Optional[str] = Query(
-        "stars", description="Поле для сортировки (stars, watchers, forks, open_issues, language)"
-    ),
-    order: Optional[str] = Query("desc", description="Порядок сортировки (asc или desc)"),
+        request: Request,  # Для извлечения всех параметров запроса
+        params: Top100QueryParams = Depends(),  # Параметры запроса через Pydantic
+        db_pool: Pool = Depends(get_db_pool),  # Подключение к базе данных
 ):
     """
     Получение топ-100 репозиториев из базы данных.
 
+    :param request: Объект запроса для проверки всех параметров.
+    :param params: Валидированные параметры запроса.
     :param db_pool: Пул соединений с базой данных.
-    :param sort_by: Поле для сортировки.
-    :param order: Порядок сортировки (asc или desc).
     :return: Список репозиториев.
     """
     try:
-        valid_sort_fields = ["stars", "watchers", "forks", "open_issues", "language"]
-        valid_order_values = ["asc", "desc"]
+        valid_params = {"sort_by", "order"}
+        query_params = set(request.query_params.keys())
+        unknown_params = query_params - valid_params
 
-        if sort_by not in valid_sort_fields:
-            logger.error(f"Недопустимое поле для сортировки: {sort_by}")
+        if unknown_params:
             raise HTTPException(
                 status_code=400,
-                detail="Некорректное поле сортировки.",
+                detail=f"Неизвестные параметры запроса: {', '.join(unknown_params)}"
             )
 
-        if order not in valid_order_values:
-            logger.error(f"Недопустимый порядок сортировки: {order}")
+        logger.info(f"Получен запрос с параметрами: sort_by={params.sort_by}, order={params.order}")
+
+        # Основная логика работы
+        repos = await fetch_top_repositories(
+            db_pool, sort_by=params.sort_by, order=params.order
+        )
+
+        if not repos:
+            logger.warning("Данные не найдены в базе данных для запрошенных параметров.")
             raise HTTPException(
-                status_code=400,
-                detail="Некорректный порядок сортировки.",
+                status_code=404,
+                detail="Репозитории не найдены."
             )
 
-        repos = await fetch_top_repositories(db_pool, sort_by=sort_by, order=order)
         return [RepoSchema(**repo) for repo in repos]
 
+    except PostgresError as db_err:
+        logger.error(f"Ошибка базы данных: {db_err}")
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка соединения с базой данных. Попробуйте позже."
+        )
     except HTTPException as http_err:
-        logger.error(f"HTTPException: {http_err.detail}")
-        raise
+        logger.warning(f"Обработка HTTP-ошибки: {http_err.detail}")
+        raise http_err
     except Exception as e:
-        logger.error(f"Ошибка при получении данных о репозиториях: {e}")
+        logger.error(f"Необработанная ошибка: {e}")
         raise HTTPException(
             status_code=500,
             detail="Произошла внутренняя ошибка сервера. Попробуйте позже."

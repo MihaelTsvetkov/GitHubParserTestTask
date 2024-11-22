@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from app.routers import repos, activity
-from app.database.db import get_db_pool
 from fastapi.middleware.cors import CORSMiddleware
+from asyncpg import create_pool
+from app.database.utils import set_db_pool
+from app.config.config import Settings
 import logging
+from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,23 +35,22 @@ def include_routers():
 
 include_routers()
 
-db_pool = None
-
 
 @app.on_event("startup")
 async def startup_event():
     """
-    Обработчик события старта приложения.
-    Инициализирует подключение к базе данных.
+    Инициализация подключения к базе данных при старте приложения.
     """
-    global db_pool
     try:
-        db_pool = await get_db_pool()
-        async with db_pool.acquire() as conn:
+        load_dotenv()
+        settings = Settings()
+        pool = await create_pool(dsn=settings.database_url)
+        await set_db_pool(pool)
+        async with pool.acquire() as conn:
             await conn.execute("SELECT 1")
         logger.info("Успешное подключение к базе данных")
     except Exception as e:
-        logger.error(f"Ошибка подключения к базе данных при старте: {e}")
+        logger.error(f"Ошибка подключения к базе данных: {e}")
         raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
 
 
@@ -75,4 +77,3 @@ async def root():
     :return: Сообщение о работоспособности API.
     """
     return {"message": "GitHub Repo Analytics API работает!"}
-
